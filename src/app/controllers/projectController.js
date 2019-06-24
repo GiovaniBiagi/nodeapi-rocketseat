@@ -7,24 +7,86 @@ const Task = require('../models/Task')
 const router = express.Router()
 
 router.use(authMiddleware)
+//LISTANDO TODOS OS PROJETOS NO MONGO
+router.get('/', async (req, res) => {
+    try {
+        const projects = await Project.find().populate(['user', 'tasks'])
 
-router.get('/', (req, res) => {
-    res.send({ user : req.userId})
+        return res.send({ projects })
+    } catch (err) {
+        return res.status(400).send({ error : 'Error loading projects' })
+    }
 })
-
+//LISTANDO UM PROJETO NO MONGO(UTILIZANDO O ID COMO PARAMETRO)
 router.get('/:projectId', async(req, res) => {
-    res.send({ user: req.userId })
-})
+    try {
+        const project = await Project.findById(req.params.projectId).populate('user', 'tasks')
 
-router.post('/', async(req, res) => {
-    res.send({ user: req.userId })
+        return res.send({ project })
+    } catch (err) {
+        return res.status(400).send({ error : 'Error loading project' })
+    }
 })
+//CRIANDO PROJETO NO MONGO
+router.post('/', async (req, res) => {
+    try {
 
+        const { title, description, tasks } = req.body
+
+        const project = await Project.create({ title, description, user: req.userId })
+
+        await Promise.all(tasks.map(async task => {
+            const projectTask = new Task({ ...task, project : project._id })
+
+            await projectTask.save()
+
+            project.tasks.push(projectTask)
+        }))
+
+        await project.save()
+
+        return res.send({ project })
+    } catch (err) {
+        return res.status(400).send({ error : 'Error creating a new projct!' })
+    }
+})
+//EDITANDO PROJETO NO MONGO
 router.put('/:projectId', async(req, res) => {
-    res.send({ user: req.userId })
-})
+    try {
 
+        const { title, description, tasks } = req.body
+
+        const project = await Project.findByIdAndUpdate(req.params.projectId, { 
+            title, 
+            description,
+        },{ new: true})
+
+        project.tasks = []
+        await Task.remove({ project: project._id })
+
+        await Promise.all(tasks.map(async task => {
+            const projectTask = new Task({ ...task, project : project._id })
+
+            await projectTask.save()
+
+            project.tasks.push(projectTask)
+        }))
+
+        await project.save()
+
+        return res.send({ project })
+    } catch (err) {
+        return res.status(400).send({ error : 'Error updating projct!' })
+    }
+})
+//DELETANDO PROJETO DO MONGO
 router.delete('/:projectId', async(req, res) => {
-    res.send({ user: req.userId })
+    try {
+        await Project.findByIdAndRemove(req.params.projectId)
+
+        return res.send()
+    } catch (err) {
+        return res.status(400).send({ error : 'Error deleting project' })
+    }
 })
 module.exports = app => app.use('/projects', router)
